@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import DatabaseConnection, { DatabaseConfig } from "./DatabaseConnection";
 import * as XLSX from "xlsx";
-import { connectToDatabase, syncData } from "@/lib/api";
+import { connectToDatabase, syncData } from "@/lib/mockApi";
 import FileUploadZone from "./FileUploadZone";
 import DataPreviewGrid from "./DataPreviewGrid";
 import SyncControls from "./SyncControls";
@@ -21,9 +21,23 @@ const Home = ({ onFileUpload = () => {}, onSync = () => {} }: HomeProps) => {
   const [excelData, setExcelData] = useState<any[]>([]);
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [columns, setColumns] = useState<any[]>([]);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
+  const [syncResults, setSyncResults] = useState<any[]>([
+    {
+      id: "1",
+      filename: "",
+      timestamp: new Date().toISOString(),
+      status: "pending",
+      recordsProcessed: 0,
+      recordsSuccessful: 0,
+      recordsFailed: 0,
+      message: "",
+    },
+  ]);
 
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
+    setCurrentFile(file);
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
@@ -40,8 +54,15 @@ const Home = ({ onFileUpload = () => {}, onSync = () => {} }: HomeProps) => {
           })),
         );
         setExcelData(jsonData);
-        console.log("Excel Data:", jsonData);
-        console.log("Columns:", excelColumns);
+        setSyncResults((prev) => [
+          {
+            ...prev[0],
+            filename: file.name,
+            recordsProcessed: jsonData.length,
+            status: "ready",
+            message: "File uploaded, ready for sync",
+          },
+        ]);
       }
 
       setUploadProgress(100);
@@ -52,6 +73,13 @@ const Home = ({ onFileUpload = () => {}, onSync = () => {} }: HomeProps) => {
     } catch (error) {
       console.error("Error parsing Excel file:", error);
       setIsUploading(false);
+      setSyncResults((prev) => [
+        {
+          ...prev[0],
+          status: "error",
+          message: "Error parsing Excel file",
+        },
+      ]);
     }
   };
 
@@ -61,14 +89,40 @@ const Home = ({ onFileUpload = () => {}, onSync = () => {} }: HomeProps) => {
       return;
     }
 
+    if (!currentFile || excelData.length === 0) {
+      alert("Please upload a file first");
+      return;
+    }
+
     setIsSyncing(true);
+    setSyncResults((prev) => [
+      { ...prev[0], status: "syncing", message: "Syncing data..." },
+    ]);
+
     try {
       const result = await syncData(excelData);
       setSyncProgress(100);
-      // Update results table here
+      setSyncResults((prev) => [
+        {
+          ...prev[0],
+          status: result.success ? "success" : "error",
+          recordsSuccessful: result.successful,
+          recordsFailed: result.failed,
+          message:
+            result.message +
+            (result.errors?.length ? `\n${result.errors.join("\n")}` : ""),
+          timestamp: new Date().toISOString(),
+        },
+      ]);
     } catch (error) {
       console.error("Sync error:", error);
-      alert("Error during sync operation");
+      setSyncResults((prev) => [
+        {
+          ...prev[0],
+          status: "error",
+          message: "Error during sync operation",
+        },
+      ]);
     } finally {
       setIsSyncing(false);
       setSyncProgress(0);
@@ -130,7 +184,7 @@ const Home = ({ onFileUpload = () => {}, onSync = () => {} }: HomeProps) => {
             progress={syncProgress}
           />
 
-          <ResultsTable />
+          <ResultsTable results={syncResults} />
         </div>
       </div>
     </div>
