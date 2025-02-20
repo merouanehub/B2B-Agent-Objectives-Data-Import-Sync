@@ -1,12 +1,12 @@
 import { DatabaseConfig } from "@/components/DatabaseConnection";
 
-const API_URL = "https://your-backend-api.com";
+const API_BASE_URL = "https://your-backend-api.com";
 
 export const connectToDatabase = async (
   config: DatabaseConfig,
 ): Promise<boolean> => {
   try {
-    const response = await fetch(`${API_URL}/connect`, {
+    const response = await fetch(`${API_BASE_URL}/api/connect`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -14,7 +14,7 @@ export const connectToDatabase = async (
       body: JSON.stringify(config),
     });
 
-    if (!response.ok) throw new Error("Connection failed");
+    if (!response.ok) throw new Error("Failed to connect");
     return true;
   } catch (err) {
     console.error("Database connection error:", err);
@@ -30,9 +30,10 @@ export const syncData = async (
   successful: number;
   failed: number;
   message: string;
+  errors?: string[];
 }> => {
   try {
-    const response = await fetch(`${API_URL}/sync`, {
+    const response = await fetch(`${API_BASE_URL}/api/sync`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -48,7 +49,8 @@ export const syncData = async (
       success: false,
       processed: 0,
       successful: 0,
-      failed: 0,
+      failed: data.length,
+      errors: [err.message],
       message: "Error during sync operation",
     };
   }
